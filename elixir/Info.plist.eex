@@ -2,9 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-
   <key>CFBundleName</key>
   <string>Minimal</string>
   <key>CFBundleDisplayName</key>
@@ -12,10 +9,12 @@
   <key>CFBundleIdentifier</key>
   <string>minimal</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string><%= release.version %></string>
   <key>CFBundleVersion</key>
-  <string>1.0.0</string>
+  <string><%= release.version %></string>
   <key>CFBundleExecutable</key>
   <string>app</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
 </dict>
 </plist>

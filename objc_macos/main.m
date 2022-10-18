@@ -1,14 +1,13 @@
 #import <AppKit/AppKit.h>
 
-@interface AppDelegate : NSApplication
+@interface AppDelegate : NSObject <NSApplicationDelegate>
+
+@property (nonatomic, assign) NSWindow *window;
+
 @end
 
 @implementation AppDelegate
-@end
-
-int main(int argc, char *argv[]) {
-  @autoreleasepool {
-    [NSApplication sharedApplication];
+- (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     id menubar = [NSMenu new];
     id appMenuItem = [NSMenuItem new];
     [menubar addItem:appMenuItem];
@@ -19,17 +18,27 @@ int main(int argc, char *argv[]) {
     id quitMenuItem = [[NSMenuItem alloc] initWithTitle:quitTitle action:@selector(terminate:) keyEquivalent:@"q"] ;
     [appMenu addItem:quitMenuItem];
     [appMenuItem setSubmenu:appMenu];
-    id window = [[NSWindow alloc] initWithContentRect:NSMakeRect(10, 10, 200, 200) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
-    [window setTitle:appName];
-    [window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
-    [window makeKeyAndOrderFront:nil];
 
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    int mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable; // | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+    _window = [[NSWindow alloc] initWithContentRect:NSMakeRect(10, 10, 200, 200) styleMask:mask backing:NSBackingStoreBuffered defer:NO];
+    [_window setTitle:appName];
+    [_window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
+    [_window makeKeyAndOrderFront:nil];
+    [NSApp activateIgnoringOtherApps:YES];
+}
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [NSApp activateIgnoringOtherApps:YES];
-    });
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
+{
+    return YES;
+}
 
-    [NSApp run];
-  }
+@end
+
+int main(int argc, char *argv[]) {
+    @autoreleasepool {
+        AppDelegate *delegate = [[AppDelegate alloc] init];
+        NSApplication *app = [NSApplication sharedApplication];
+        app.delegate = delegate;
+        NSApplicationMain(argc, argv);
+    }
 }

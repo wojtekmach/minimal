@@ -1,0 +1,195 @@
+#include <Foundation/Foundation.h>
+#include <stdlib.h>
+#include <erl_nif.h>
+
+void startErlang();
+
+ERL_NIF_TERM bridge_command(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int arity;
+    const ERL_NIF_TERM *elements;
+
+    if (argc != 1 || !enif_get_tuple(env, argv[0], &arity, &elements) || arity != 2) {
+        return enif_make_atom(env, "badarg");
+    }
+
+    if (enif_compare(elements[0], enif_make_atom(env, "set_label")) == 0) {
+        char buf[128];
+        if (enif_get_string(env, elements[1], buf, 128, ERL_NIF_LATIN1) <= 0) {
+            return enif_make_atom(env, "badarg");
+        }
+        NSString *s = [[NSString alloc] initWithCString:buf encoding:NSISOLatin1StringEncoding];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"bridge:set_label" object:s];
+        return enif_make_atom(env, "ok");
+    } else {
+        return enif_make_atom(env, "badarg");
+    }
+}
+
+#if TARGET_OS_IPHONE
+    #include <UIKit/UIKit.h>
+
+    @interface AppDelegate : UIResponder <UIApplicationDelegate>
+
+    @property (strong, nonatomic) UIWindow *window;
+
+    @end
+
+    @implementation AppDelegate
+
+    - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(id)options {
+        CGRect mainScreenBounds = [[UIScreen mainScreen] bounds];
+        self.window = [[UIWindow alloc] initWithFrame:mainScreenBounds];
+        UIViewController *viewController = [[UIViewController alloc] init];
+        viewController.view.backgroundColor = [UIColor blackColor];
+        viewController.view.frame = mainScreenBounds;
+
+        UILabel *label = [[UILabel alloc] initWithFrame:mainScreenBounds];
+        label.numberOfLines = 0;
+        label.text = @"Hello!";
+        label.textColor = [UIColor whiteColor];
+        [viewController.view addSubview: label];
+
+        self.window.rootViewController = viewController;
+        [self.window makeKeyAndVisible];
+
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"bridge:set_label"
+          object:nil
+          queue: [NSOperationQueue mainQueue]
+          usingBlock:^(NSNotification *notification) {
+              label.text = notification.object;
+          }];
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            startErlang();
+        });
+
+        return YES;
+    }
+
+    @end
+
+    int main(int argc, char *argv[])
+    {
+        @autoreleasepool {
+            return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
+        }
+    }
+#else
+    #include <AppKit/AppKit.h>
+
+    @interface AppDelegate : NSObject <NSApplicationDelegate>
+
+    @property (nonatomic, assign) NSWindow *window;
+
+    @end
+
+    @implementation AppDelegate
+
+    - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+        id menubar = [NSMenu new];
+        id appMenuItem = [NSMenuItem new];
+        [menubar addItem:appMenuItem];
+        [NSApp setMainMenu:menubar];
+        id appMenu = [NSMenu new];
+        id appName = [[NSProcessInfo processInfo] processName];
+        id quitTitle = [@"Quit " stringByAppendingString:appName];
+        id quitMenuItem = [[NSMenuItem alloc] initWithTitle:quitTitle action:@selector(terminate:) keyEquivalent:@"q"] ;
+        [appMenu addItem:quitMenuItem];
+        [appMenuItem setSubmenu:appMenu];
+
+        self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(10, 10, 200, 200)
+                                        styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+                                        backing:NSBackingStoreBuffered
+                                        defer:NO];
+        self.window.title = appName;
+        [self.window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
+        [self.window makeKeyAndOrderFront:nil];
+        [NSApp activateIgnoringOtherApps:YES];
+
+        NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 140)];
+        label.stringValue = @"Hello!";
+        label.bezeled = NO;
+        label.drawsBackground = NO;
+        label.editable = NO;
+        label.selectable = NO;
+        [self.window.contentView addSubview:label];
+
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"bridge:set_label"
+          object:nil
+          queue: [NSOperationQueue mainQueue]
+          usingBlock:^(NSNotification *notification) {
+              label.stringValue = notification.object;
+          }];
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            startErlang();
+        });
+    }
+
+    - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
+    {
+        return YES;
+    }
+
+    @end
+
+    int main(int argc, char *argv[])
+    {
+        @autoreleasepool {
+            AppDelegate *delegate = [[AppDelegate alloc] init];
+            NSApplication *app = [NSApplication sharedApplication];
+            app.delegate = delegate;
+            return NSApplicationMain(argc, (const char * _Nonnull * _Nonnull) argv);
+        }
+    }
+#endif
+
+extern ERL_NIF_TERM (*bridge_command_handler)(ErlNifEnv*, int, const ERL_NIF_TERM*);
+
+extern void erl_start(int argc, char **argv);
+
+void startErlang()
+{
+    bridge_command_handler = &bridge_command;
+
+    #if TARGET_OS_IPHONE
+        NSString* rootdir = [[[NSBundle mainBundle] bundlePath] stringByAppendingString:@"/rel"];
+    #else
+        NSString* rootdir = [[[NSBundle mainBundle] bundlePath] stringByAppendingString:@"/Contents/Resources/rel"];
+    #endif
+
+    NSString* homedir = NSHomeDirectory();
+    NSString* bindir = [rootdir stringByAppendingString:@"/erts-<%= release.erts_version %>/bin"];
+    NSString* configdir = [rootdir stringByAppendingString:@"/releases/<%= release.version %>/sys"];
+    NSString* bootdir = [rootdir stringByAppendingString:@"/releases/<%= release.version %>/start"];
+    NSString* libdir = [rootdir stringByAppendingString:@"/lib"];
+
+    setenv("BINDIR", [bindir UTF8String], 0);
+    const char *args[] = {
+        "app",
+        // "-sbwt",
+        // "none",
+        "--",
+        // "-start_epmd",
+        // "false",
+        "-home",
+        [homedir UTF8String],
+        "-sname",
+        "app",
+        "-root",
+        [rootdir UTF8String],
+        "-bindir",
+        [bindir UTF8String],
+        "-config",
+        [configdir UTF8String ],
+        "-boot",
+        [bootdir UTF8String],
+        "-boot_var",
+        "RELEASE_LIB",
+        [libdir UTF8String],
+        "-noshell"
+    };
+    erl_start(sizeof(args) / sizeof(args[0]), (char **)args);
+}
+
