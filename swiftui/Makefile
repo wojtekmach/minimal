@@ -1,3 +1,5 @@
+TTY := $(shell tty)
+
 default: run
 
 .PHONY: clean run Minimal.app
