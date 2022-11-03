@@ -5,7 +5,7 @@ default: macos
 .PHONY: clean macos Minimal-macos.app
 
 clean:
-	rm -rf Minimal-macos.app Minimal-ios.app Minimal-tvos.app
+	rm -rf Minimal-macos.app
 
 macos: Minimal-macos.app
 	open --stdout $(TTY) --stderr $(TTY) Minimal-macos.app
